@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
+import os
 
 
 def show_image(image, save_path=None):
@@ -10,9 +11,10 @@ def show_image(image, save_path=None):
     image = np.transpose(image, (1, 2, 0))
     image = np.uint8(255 * image)
     plt.imshow(image)
-    plt.show()
     if save_path:
         plt.savefig(save_path)
+    plt.show()
+
 
 
 def show_cam(cam: torch.Tensor, save_path=None):
@@ -21,9 +23,10 @@ def show_cam(cam: torch.Tensor, save_path=None):
     cam_gray = np.uint8(255 * cam)
     img_color = cv2.applyColorMap(cam_gray, cv2.COLORMAP_JET)
     plt.imshow(img_color)
-    plt.show()
     if save_path:
         plt.savefig(save_path)
+    plt.show()
+
 
 
 def show_cam_image(cam, image, save_path=None):
@@ -32,7 +35,7 @@ def show_cam_image(cam, image, save_path=None):
     cam_gray = np.uint8(255 * cam)
     img_color = cv2.applyColorMap(cam_gray, cv2.COLORMAP_JET)
 
-    image = image.cpu().numpy()
+    image = image.cpu().detach().numpy()
     image = np.transpose(image, (1, 2, 0))
     image = np.uint8(255 * image)
 
@@ -40,15 +43,14 @@ def show_cam_image(cam, image, save_path=None):
     cam_image = np.uint8(cam_image)
 
     plt.imshow(cam_image)
-    plt.show()
     if save_path:
         plt.savefig(save_path)
-
+    plt.show()
 
 
 
 if __name__ == "__main__":
-    from CAM.base_CAM import get_cam,get_cam_diff
+    from CAM.base_CAM import get_cam, get_cam_diff
     from trainers.standard_train import *
     from data.cifar10 import cifar10
     from models.cifar10_CNN import Net
@@ -67,10 +69,15 @@ if __name__ == "__main__":
     device = torch.device(args.gpu)
 
     # setup data loader
-    test_loader = cifar10(dataRoot="../data/dataset", batchsize=1, train=False)
+    test_loader = cifar10(dataRoot="../data/dataset", batchsize=8, train=False)
     pretrain_model_path = "../pth/standard_model-epoch30.pth"
     model = Net().to(device)
     model.load_state_dict(torch.load(pretrain_model_path))
+
+    save_path = "../result_image/cam_show"
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+
 
     for data, target in test_loader:
         data, target = data.to(device), target.to(device)
@@ -81,20 +88,43 @@ if __name__ == "__main__":
         loss.backward()
         data_grad = data.grad.data
 
-
-        perturbed_data = fgsm_attack(data, 0.1, data_grad, min_val=0, max_val=1)
+        perturbed_data = fgsm_attack(data, 0.03, data_grad, min_val=0, max_val=1)
         final_outputs = model(perturbed_data)
         _, final_predicted = torch.max(final_outputs.data, 1)
-        cam = get_cam_diff(model,data,perturbed_data,target=final_predicted)
-        show_cam(cam[0])
 
-        cam2 = get_cam(model,data,target=final_predicted)
-        show_cam(cam2[0])
+        cam_nature_target = get_cam(model=model, inputs=data, target=target)
 
-        cam3 = get_cam(model,perturbed_data,target=final_predicted)
-        show_cam(cam3[0])
+        # for i in range(8):
+        #     if target[i] != final_predicted[i]:
+        #         nature_image_name = "{}-".format(i) + "real_class_{}".format(
+        #             target[i].item()) + "nature" + ".jpg"
+        #         show_image(image=data[i],save_path=os.path.join(save_path,nature_image_name))
+        #
+        #         adv_image_name = "{}-".format(i) + "per_class_{}".format(
+        #             final_predicted[i].item()) + "adv" + ".jpg"
+        #         show_image(image=perturbed_data[i],save_path=os.path.join(save_path,adv_image_name))
 
-        show_image(image=data[0])
-
+        for i in range(8):
+            if target[i] != final_predicted[i]:
+                save_name = "{}-".format(i) + "cam_nature_target" + ".jpg"
+                # show_cam_image(cam=cam_nature_target[i], image=data[i],save_path=os.path.join(save_path,save_name))
+                show_cam(cam=cam_nature_target[i])
+        # cam_adv_target = get_cam(model=model, inputs=perturbed_data, target=target)
+        # for i in range(8):
+        #     if target[i] != final_predicted[i]:
+        #         save_name = "{}-".format(i) + "cam_fgsm_adv_target" + ".jpg"
+        #         show_cam_image(cam=cam_adv_target[i], image=perturbed_data[i],save_path=os.path.join(save_path,save_name))
+        #
+        # cam_nature_per = get_cam(model=model, inputs=data, target=final_predicted)
+        # for i in range(8):
+        #     if target[i] != final_predicted[i]:
+        #         save_name = "{}-".format(i) + "cam_nature_per" + ".jpg"
+        #         show_cam_image(cam=cam_nature_per[i], image=data[i],save_path=os.path.join(save_path,save_name))
+        #
+        # cam_adv_per = get_cam(model=model, inputs=perturbed_data, target=final_predicted)
+        # for i in range(8):
+        #     if target[i] != final_predicted[i]:
+        #         save_name = "{}-".format(i) + "cam_adv_per" + ".jpg"
+        #         show_cam_image(cam=cam_adv_per[i], image=perturbed_data[i],save_path=os.path.join(save_path,save_name))
 
         break

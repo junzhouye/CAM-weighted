@@ -1,7 +1,6 @@
 from __future__ import print_function
 import os
 import argparse
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -15,8 +14,6 @@ from trainers.trade import trades_loss
 from CAM.base_CAM import get_cam, get_cam_diff, get_cam_diff_plus, get_random_cam_weight
 import cv2
 from CAM.CAM_utils import cam_binarization
-from CAM.random_cam import get_random_rate_binarization_mask
-import random
 
 
 # https://github.com/locuslab/fast_adversarial
@@ -52,17 +49,46 @@ def get_fgsm_adv_example(model,
     model.train()
     return x_adv
 
-def rate_weight_fgsm_adversarial_train_epoch(model, device, train_loader, optimizer, epoch, epsilon, alpha,
-                                            rate):
+
+def guide_cam_weight_fgsm_adversarial_train_epoch(model,guide_model, device, train_loader, optimizer, epoch, epsilon, alpha,
+                                            mode=1, is_bool=False):
     model.train()
     criterion = nn.CrossEntropyLoss()
+
+    guide_model.eval()
+
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
-        b,c,h,w = data.size()
         adv_data = get_fgsm_adv_example(model, data, target, optimizer, device, epsilon, alpha)
-        cam_weight = get_random_rate_binarization_mask(b, h, w, rate)
-        cam_weight = cam_weight.to(device)
-        weight_data = data + (adv_data - data) * cam_weight
+
+        if mode == 1:
+            cam_weight = get_cam(model=guide_model, inputs=data, target=target)
+            if is_bool:
+                cam_weight = cam_binarization(cam_weight)
+            cam_weight = cam_weight.to(device)
+            weight_data = data + (adv_data - data) * cam_weight
+
+        if mode == 2:
+            cam_weight = get_cam(model=guide_model, inputs=data, target=target)
+            if is_bool:
+                cam_weight = cam_binarization(cam_weight)
+            cam_weight = cam_weight.to(device)
+            weight_data = data + (adv_data - data) * (1 - cam_weight)
+
+        if mode == 3:
+            cam_weight = get_cam_diff(model=guide_model, natural_data=data, adv_data=adv_data, target=target)
+            if is_bool:
+                cam_weight = cam_binarization(cam_weight)
+            cam_weight = cam_weight.to(device)
+            weight_data = data + (adv_data - data) * cam_weight
+
+        if mode == 4:
+            cam_weight = get_cam_diff(model=guide_model, natural_data=data, adv_data=adv_data, target=target)
+            if is_bool:
+                cam_weight = cam_binarization(cam_weight)
+            cam_weight = cam_weight.to(device)
+            weight_data = data + (adv_data - data) * (1 - cam_weight)
+
         adv_out = model(weight_data)
         loss = criterion(adv_out, target)
         optimizer.zero_grad()
@@ -75,55 +101,7 @@ def rate_weight_fgsm_adversarial_train_epoch(model, device, train_loader, optimi
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                        100. * batch_idx / len(train_loader), loss.item()))
 
-def rate_weight_fgsm_adversarial_train_epoch_V2(model, device, train_loader, optimizer, epoch, epsilon, alpha):
-    model.train()
-    criterion = nn.CrossEntropyLoss()
-    # epoch is {1,2...,50}
-    rate = 0.2 * ((epoch - 1) // 10) + 0.2
-    if rate > 1:
-        rate = 1
-    for batch_idx, (data, target) in enumerate(train_loader):
-        data, target = data.to(device), target.to(device)
-        b,c,h,w = data.size()
-        adv_data = get_fgsm_adv_example(model, data, target, optimizer, device, epsilon, alpha)
-        # epoch is {1,2...,50}
-        cam_weight = get_random_rate_binarization_mask(b, h, w, rate)
-        cam_weight = cam_weight.to(device)
-        weight_data = data + (adv_data - data) * cam_weight
-        adv_out = model(weight_data)
-        loss = criterion(adv_out, target)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
 
-        # print progress
-        if batch_idx % 100 == 0:
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, batch_idx * len(data), len(train_loader.dataset),
-                       100. * batch_idx / len(train_loader), loss.item()))
-
-def rate_weight_fgsm_adversarial_train_epoch_V3(model, device, train_loader, optimizer, epoch, epsilon, alpha):
-    model.train()
-    criterion = nn.CrossEntropyLoss()
-    for batch_idx, (data, target) in enumerate(train_loader):
-        data, target = data.to(device), target.to(device)
-        b,c,h,w = data.size()
-        adv_data = get_fgsm_adv_example(model, data, target, optimizer, device, epsilon, alpha)
-        rate = random.uniform(0, 1)
-        cam_weight = get_random_rate_binarization_mask(b, h, w, rate)
-        cam_weight = cam_weight.to(device)
-        weight_data = data + (adv_data - data) * cam_weight
-        adv_out = model(weight_data)
-        loss = criterion(adv_out, target)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        # print progress
-        if batch_idx % 100 == 0:
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, batch_idx * len(data), len(train_loader.dataset),
-                       100. * batch_idx / len(train_loader), loss.item()))
 
 def eval_train(model, device, train_loader):
     model.eval()

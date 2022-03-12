@@ -15,6 +15,7 @@ from CAM.base_CAM import get_cam, get_cam_diff, get_cam_diff_plus, get_random_ca
 import cv2
 from CAM.CAM_utils import cam_binarization
 from CAM.random_cam import get_random_rate_binarization_mask
+import random
 
 
 def squared_l2_norm(x):
@@ -98,6 +99,67 @@ def rate_adversarial_train_epoch(model, device, train_loader, optimizer, epoch, 
 
         # rate mask
         adv_data = get_adv_example(model, data, target, optimizer, device, step_size, epsilon, perturb_steps)
+        random_cam_mask = get_random_rate_binarization_mask(b, h, w, rate)
+        random_cam_mask = random_cam_mask.to(device)
+        adv_weighted_data = data + (adv_data - data) * random_cam_mask
+        adv_weighted_data = adv_weighted_data.clone().detach()
+
+        adv_out = model(adv_weighted_data)
+        loss = criterion(adv_out, target)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # print progress
+        if batch_idx % 100 == 0:
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                epoch, batch_idx * len(data), len(train_loader.dataset),
+                       100. * batch_idx / len(train_loader), loss.item()))
+
+
+def rate_adversarial_train_epoch_v2(model, device, train_loader, optimizer, epoch, step_size, epsilon, perturb_steps):
+    model.train()
+    criterion = nn.CrossEntropyLoss()
+    # epoch is {1,2...,50}
+    rate = 0.2 * ((epoch - 1) // 10) + 0.2
+    if rate > 1:
+        rate = 1
+
+    for batch_idx, (data, target) in enumerate(train_loader):
+        b, c, h, w = data.size()
+        data, target = data.to(device), target.to(device)
+
+        # rate mask
+        adv_data = get_adv_example(model, data, target, optimizer, device, step_size, epsilon, perturb_steps)
+        random_cam_mask = get_random_rate_binarization_mask(b, h, w, rate)
+        random_cam_mask = random_cam_mask.to(device)
+        adv_weighted_data = data + (adv_data - data) * random_cam_mask
+        adv_weighted_data = adv_weighted_data.clone().detach()
+
+        adv_out = model(adv_weighted_data)
+        loss = criterion(adv_out, target)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # print progress
+        if batch_idx % 100 == 0:
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                epoch, batch_idx * len(data), len(train_loader.dataset),
+                       100. * batch_idx / len(train_loader), loss.item()))
+
+
+def rate_adversarial_train_epoch_v3(model, device, train_loader, optimizer, epoch, step_size, epsilon, perturb_steps):
+    model.train()
+    criterion = nn.CrossEntropyLoss()
+    for batch_idx, (data, target) in enumerate(train_loader):
+        b, c, h, w = data.size()
+        data, target = data.to(device), target.to(device)
+
+        # rate mask
+        adv_data = get_adv_example(model, data, target, optimizer, device, step_size, epsilon, perturb_steps)
+        # epoch is {1,2...,50}
+        rate = random.uniform(0, 1)
         random_cam_mask = get_random_rate_binarization_mask(b, h, w, rate)
         random_cam_mask = random_cam_mask.to(device)
         adv_weighted_data = data + (adv_data - data) * random_cam_mask

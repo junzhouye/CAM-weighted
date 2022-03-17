@@ -29,7 +29,6 @@ def get_fgsm_adv_example(model,
                          epsilon=8 / 255,
                          alpha=10 / 255):
     criterion = nn.CrossEntropyLoss()
-    model.eval()
     batch_size = len(x_natural)
     # generate adversarial example
     delta = torch.zeros_like(x_natural).to(device)
@@ -49,7 +48,6 @@ def get_fgsm_adv_example(model,
 
     x_adv = Variable(torch.clamp(x_adv, 0.0, 1.0), requires_grad=False)
     optimizer.zero_grad()
-    model.train()
     return x_adv
 
 def rate_weight_fgsm_adversarial_train_epoch(model, device, train_loader, optimizer, epoch, epsilon, alpha,

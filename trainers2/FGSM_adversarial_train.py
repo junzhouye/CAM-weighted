@@ -26,7 +26,7 @@ def get_fgsm_adv_example(model,
                          epsilon=8 / 255,
                          alpha=10 / 255):
     criterion = nn.CrossEntropyLoss()
-    model.eval()
+
     batch_size = len(x_natural)
     # generate adversarial example
     delta = torch.zeros_like(x_natural).to(device)
@@ -46,7 +46,7 @@ def get_fgsm_adv_example(model,
 
     x_adv = Variable(torch.clamp(x_adv, 0.0, 1.0), requires_grad=False)
     optimizer.zero_grad()
-    model.train()
+
     return x_adv
 
 
@@ -124,112 +124,6 @@ def cam_weight_fgsm_adversarial_train_epoch(model, device, train_loader, optimiz
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                        100. * batch_idx / len(train_loader), loss.item()))
-
-
-# def cam_weight_fgsm_adversarial_train_epoch(model, device, train_loader, optimizer, epoch, epsilon, alpha,
-#                                             mode=1):
-#     model.train()
-#     criterion = nn.CrossEntropyLoss()
-#     for batch_idx, (data, target) in enumerate(train_loader):
-#         data, target = data.to(device), target.to(device)
-#
-#         adv_data = get_fgsm_adv_example(model, data, target, optimizer, device, epsilon, alpha)
-#         if mode == 1:
-#             # 根据对抗样本预测激活最大的区域，认为这部分是扰动主要生效的区域，但是忽略了除了激活，不激活也是扰动的作用之一。
-#             cam_weight = get_cam(model=model, inputs=adv_data)
-#             cam_weight = cam_weight.to(device)
-#             weight_data = data + (adv_data - data) * cam_weight
-#         elif mode == 2:
-#             # 没啥意义
-#             cam_weight = get_cam(model=model, inputs=adv_data)
-#             cam_weight = cam_weight.to(device)
-#             weight_data = data + (adv_data - data) * (1 - cam_weight)
-#         elif mode == 3:
-#             # target是adv_input的预测结果
-#             model.eval()
-#             with torch.no_grad():
-#                 outputs = model(adv_data)
-#                 _, predicted = torch.max(outputs.data, 1)
-#             cam_weight = get_cam(model=model, inputs=data, target=predicted)
-#             cam_weight = cam_weight.to(device)
-#             weight_data = data + (adv_data - data) * cam_weight
-#             model.train()
-#         elif mode == 4:
-#             model.eval()
-#             with torch.no_grad():
-#                 outputs = model(adv_data)
-#                 _, predicted = torch.max(outputs.data, 1)
-#             cam_weight = get_cam(model=model, inputs=data, target=predicted)
-#             cam_weight = cam_weight.to(device)
-#             weight_data = data + (adv_data - data) * (1 - cam_weight)
-#             model.train()
-#         elif mode == 5:
-#             cam_weight = get_cam(model=model, inputs=adv_data, target=target)
-#             cam_weight = cam_weight.to(device)
-#             weight_data = data + (adv_data - data) * cam_weight
-#         elif mode == 6:
-#             cam_weight = get_cam(model=model, inputs=adv_data, target=target)
-#             cam_weight = cam_weight.to(device)
-#             weight_data = data + (adv_data - data) * (1 - cam_weight)
-#         elif mode == 7:
-#             cam_weight = get_cam(model=model, inputs=data, target=target)
-#             cam_weight = cam_weight.to(device)
-#             weight_data = data + (adv_data - data) * cam_weight
-#         elif mode == 8:
-#             cam_weight = get_cam(model=model, inputs=data, target=target)
-#             cam_weight = cam_weight.to(device)
-#             weight_data = data + (adv_data - data) * (1 - cam_weight)
-#         elif mode == 9:
-#             # mode 9 开始 使用类别激活差异作为cam weighted的依据
-#             # 以 ground true label 的激活差异作为指导
-#             cam_weight = get_cam_diff(model=model, natural_data=data, adv_data=adv_data, target=target)
-#             cam_weight = cam_weight.to(device)
-#             weight_data = data + (adv_data - data) * cam_weight
-#         elif mode == 10:
-#             # 以 预测 label 的激活差异作为指导
-#             cam_weight = get_cam_diff(model=model, natural_data=data, adv_data=adv_data)
-#             cam_weight = cam_weight.to(device)
-#             weight_data = data + (adv_data - data) * cam_weight
-#         elif mode == 11:
-#             # 综合了ground true label 和预测 label 的激活差异
-#             cam_weight = get_cam_diff_plus(model=model, natural_data=data, adv_data=adv_data, target=target)
-#             cam_weight = cam_weight.to(device)
-#             weight_data = data + (adv_data - data) * cam_weight
-#         elif mode == 12:
-#             b = data.size()[0]
-#             cam_weight = get_random_cam_weight(b, 32, 32)
-#             cam_weight = cam_weight.to(device)
-#             weight_data = data + (adv_data - data) * cam_weight
-#         elif mode == 13:
-#             # mode 9
-#             cam_weight = get_cam_diff(model=model, natural_data=data, adv_data=adv_data, target=target)
-#             cam_weight = cam_weight.to(device)
-#             weight_data = data + (adv_data - data) * (1 - cam_weight)
-#         elif mode == 14:
-#             # mode 10
-#             cam_weight = get_cam_diff(model=model, natural_data=data, adv_data=adv_data)
-#             cam_weight = cam_weight.to(device)
-#             weight_data = data + (adv_data - data) * (1 - cam_weight)
-#         elif mode == 15:
-#             # mode 11
-#             cam_weight = get_cam_diff_plus(model=model, natural_data=data, adv_data=adv_data, target=target)
-#             cam_weight = cam_weight.to(device)
-#             weight_data = data + (adv_data - data) * (1 - cam_weight)
-#         else:
-#             print("Not choose mode!!!")
-#             return
-#
-#         adv_out = model(weight_data)
-#         loss = criterion(adv_out, target)
-#         optimizer.zero_grad()
-#         loss.backward()
-#         optimizer.step()
-#
-#         # print progress
-#         if batch_idx % 100 == 0:
-#             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-#                 epoch, batch_idx * len(data), len(train_loader.dataset),
-#                        100. * batch_idx / len(train_loader), loss.item()))
 
 
 def eval_train(model, device, train_loader):
